@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false; // No direct user deletion
+    }
+
+    // Swap Requests collection
+    match /swapRequests/{requestId} {
+      allow read: if request.auth != null && (resource.data.fromUserId == request.auth.uid || resource.data.toUserId == request.auth.uid);
+      allow create: if request.auth != null && request.resource.data.fromUserId == request.auth.uid;
+      // Allow update if the user is either the original fromUser or toUser of the request
+      allow update: if request.auth != null && (resource.data.toUserId == request.auth.uid || resource.data.fromUserId == request.auth.uid);
+      allow delete: if false; // No direct request deletion
+    }
+
+    // Feedback collection
+    match /feedback/{feedbackId} {
+      allow read: if request.auth != null && (resource.data.fromUserId == request.auth.uid || resource.data.toUserId == request.auth.uid);
+      allow create: if request.auth != null && request.resource.data.fromUserId == request.auth.uid;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // Reports collection
+    match /reports/{reportId} {
+      allow read: if request.auth != null && (resource.data.reporterId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      allow create: if request.auth != null && request.resource.data.reporterId == request.auth.uid;
+      allow update: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow delete: if false;
+    }
+
+    // Admin Actions collection
+    match /adminActions/{actionId} {
+      allow read: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow create: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // Notifications collection
+    match /notifications/{notificationId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null; // Allow anyone to create notifications (e.g., system, other users)
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid; // Only recipient can mark as read
+      allow delete: if false;
+    }
+
+    // Chats collection
+    match /chats/{chatId} {
+      // Allow create if the authenticated user is in the participants array of the new chat
+      allow create: if request.auth != null && request.auth.uid in request.resource.data.participants;
+      // Allow read, update, delete if the authenticated user is in the participants array of the existing chat
+      allow read, update, delete: if request.auth != null && request.auth.uid in resource.data.participants;
+    }
+    match /chats/{chatId}/messages/{messageId} {
+      // Allow create if the authenticated user is in the participants array of the parent chat
+      allow create: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+      // Allow read, update, delete if the authenticated user is in the participants array of the parent chat
+      allow read, update, delete: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+    }
+  }
+}
